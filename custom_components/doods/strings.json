@@ -49,7 +49,7 @@
         },
         "data_description": {
           "entity_id": "The camera whose images DOODS will analyze.",
-          "name": "Optional. Overrides the default \"Doods <camera>\" name for this profile's entity. Leave blank to use the default.",
+          "name": "Optional. Overrides the default \"Doods\" plus camera name entity name for this profile. Leave blank to use the default.",
           "labels": "Which object labels to look for, from what this detector supports. Leave empty to report every label the detector finds, at the base confidence below.",
           "confidence": "The minimum confidence percentage a detection needs to be reported, for any selected label without its own override on the next screen(s).",
           "scan_interval": "How often, in seconds, to ask DOODS to analyze a new image from this camera. Lower values react faster but poll the server (and your camera) more often.",
@@ -187,7 +187,7 @@
         },
         "data_description": {
           "entity_id": "The camera whose images DOODS will analyze.",
-          "name": "Optional. Overrides the default \"Doods <camera>\" name for this profile's entity. Leave blank to use the default.",
+          "name": "Optional. Overrides the default \"Doods\" plus camera name entity name for this profile. Leave blank to use the default.",
           "labels": "Which object labels to look for, from what this detector supports. Leave empty to report every label the detector finds, at the base confidence below.",
           "confidence": "The minimum confidence percentage a detection needs to be reported, for any selected label without its own override on the next screen(s).",
           "scan_interval": "How often, in seconds, to ask DOODS to analyze a new image from this camera. Lower values react faster but poll the server (and your camera) more often.",
