@@ -1,0 +1,13 @@
+{
+  "domain": "doods",
+  "name": "DOODS - Dedicated Open Object Detection Service",
+  "codeowners": ["@TheBartoMan"],
+  "config_flow": true,
+  "dependencies": ["image_processing"],
+  "documentation": "https://github.com/TheBartoMan/ha-doods",
+  "issue_tracker": "https://github.com/TheBartoMan/ha-doods/issues",
+  "iot_class": "local_polling",
+  "loggers": ["pydoods"],
+  "requirements": ["pydoods==1.0.2"],
+  "version": "1.0.0"
+}

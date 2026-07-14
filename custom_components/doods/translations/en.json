@@ -1,0 +1,146 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to a DOODS server",
+        "description": "Enter the address of the DOODS server you want Home Assistant to send camera images to.",
+        "data": {
+          "url": "URL",
+          "auth_key": "Auth key",
+          "timeout": "Timeout (seconds)"
+        }
+      },
+      "detector": {
+        "title": "Choose a detector",
+        "description": "Select which detector on this DOODS server to use.",
+        "data": {
+          "detector": "Detector"
+        }
+      },
+      "manage": {
+        "title": "DOODS cameras",
+        "description": "Add, edit or remove cameras that DOODS analyzes. You'll be able to add more cameras to this same server later from the integration's options.",
+        "menu_options": {
+          "add_camera": "Add a camera",
+          "edit_camera": "Edit a camera",
+          "remove_camera": "Remove a camera",
+          "finish": "Finish"
+        }
+      },
+      "add_camera": {
+        "title": "{action} a camera",
+        "description": "Step 1 (of several -- Submit moves to the next step). Pick a camera, which labels to look for, and a base confidence. If you don't pick any labels, DOODS will report anything it finds at this confidence.",
+        "data": {
+          "entity_id": "Camera",
+          "labels": "Labels to detect",
+          "confidence": "Base confidence",
+          "scan_interval": "Scan interval (seconds)",
+          "file_out": "Save an annotated snapshot to (optional path, e.g. /config/www/doods_front.jpg)"
+        }
+      },
+      "label_confidence": {
+        "title": "Confidence for \"{label}\"",
+        "description": "Step {step} of {total} -- Submit moves to the next step. Set a minimum confidence just for the \"{label}\" label, or leave it at the base confidence.",
+        "data": {
+          "confidence": "Confidence"
+        }
+      },
+      "area": {
+        "title": "Detection area",
+        "description": "Step {step} of {total}, final step -- Submit saves this camera. Restrict matches to part of the image. Top/left is 0,0 and bottom/right is 1,1. Leave the defaults to use the whole image.",
+        "data": {
+          "top": "Top",
+          "left": "Left",
+          "bottom": "Bottom",
+          "right": "Right",
+          "covers": "Detections must be fully inside this area"
+        }
+      },
+      "edit_camera": {
+        "title": "Edit a camera profile",
+        "description": "Pick a profile to reconfigure. You'll re-enter its labels, confidence, scan interval, area and snapshot settings.",
+        "data": {
+          "profile_id": "Profile"
+        }
+      },
+      "remove_camera": {
+        "title": "Remove a camera profile",
+        "data": {
+          "profile_id": "Profile"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Unable to connect to the DOODS server.",
+      "no_detectors": "The DOODS server did not report any detectors."
+    },
+    "abort": {
+      "already_configured": "This DOODS server and detector are already configured. Any cameras from your YAML configuration have been merged into the existing entry.",
+      "cannot_connect": "Unable to connect to the DOODS server.",
+      "detector_not_found": "The imported detector is no longer available on the DOODS server.",
+      "no_cameras": "The imported configuration did not list any cameras."
+    }
+  },
+  "options": {
+    "step": {
+      "manage": {
+        "title": "DOODS cameras",
+        "description": "Add, edit or remove cameras that DOODS analyzes.",
+        "menu_options": {
+          "add_camera": "Add a camera",
+          "edit_camera": "Edit a camera",
+          "remove_camera": "Remove a camera",
+          "finish": "Finish"
+        }
+      },
+      "add_camera": {
+        "title": "{action} a camera",
+        "description": "Step 1 (of several -- Submit moves to the next step). Pick a camera, which labels to look for, and a base confidence. If you don't pick any labels, DOODS will report anything it finds at this confidence. A camera can be added more than once if you want separate profiles (e.g. a general one and one cropped to a specific zone).",
+        "data": {
+          "entity_id": "Camera",
+          "labels": "Labels to detect",
+          "confidence": "Base confidence",
+          "scan_interval": "Scan interval (seconds)",
+          "file_out": "Save an annotated snapshot to (optional path, e.g. /config/www/doods_front.jpg)"
+        }
+      },
+      "label_confidence": {
+        "title": "Confidence for \"{label}\"",
+        "description": "Step {step} of {total} -- Submit moves to the next step. Set a minimum confidence just for the \"{label}\" label, or leave it at the base confidence.",
+        "data": {
+          "confidence": "Confidence"
+        }
+      },
+      "area": {
+        "title": "Detection area",
+        "description": "Step {step} of {total}, final step -- Submit saves this camera. Restrict matches to part of the image. Top/left is 0,0 and bottom/right is 1,1. Leave the defaults to use the whole image.",
+        "data": {
+          "top": "Top",
+          "left": "Left",
+          "bottom": "Bottom",
+          "right": "Right",
+          "covers": "Detections must be fully inside this area"
+        }
+      },
+      "edit_camera": {
+        "title": "Edit a camera profile",
+        "description": "Pick a profile to reconfigure. You'll re-enter its labels, confidence, scan interval, area and snapshot settings.",
+        "data": {
+          "profile_id": "Profile"
+        }
+      },
+      "remove_camera": {
+        "title": "Remove a camera profile",
+        "data": {
+          "profile_id": "Profile"
+        }
+      }
+    }
+  },
+  "issues": {
+    "deprecated_yaml": {
+      "title": "DOODS YAML configuration is deprecated",
+      "description": "This DOODS server and detector were imported from your `configuration.yaml` -- including cameras, labels, confidence levels, detection areas, snapshot paths and scan intervals. You can safely remove the matching `platform: doods` entries from your `image_processing:` YAML configuration; everything is now managed from this integration's settings. This notice clears itself automatically once none are left and Home Assistant restarts."
+    }
+  }
+}
