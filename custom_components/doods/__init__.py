@@ -18,7 +18,7 @@ from homeassistant.const import (
 )
 from homeassistant.core import Event, HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryNotReady
-from homeassistant.helpers import issue_registry as ir
+from homeassistant.helpers import config_validation as cv, issue_registry as ir
 from homeassistant.helpers.entity_component import EntityComponent
 from homeassistant.helpers.event import async_call_later
 from homeassistant.helpers.typing import ConfigType
@@ -28,6 +28,13 @@ from .const import CONF_AUTH_KEY, CONF_DETECTOR, DATA_SEEN_YAML_ENTRIES, DOMAIN
 _LOGGER = logging.getLogger(__name__)
 
 PLATFORMS: list[Platform] = [Platform.IMAGE_PROCESSING]
+
+# The `doods` domain itself takes no top-level YAML -- the legacy config
+# lives under `image_processing: - platform: doods` instead, handled by
+# image_processing.py's own PLATFORM_SCHEMA. This just tells hassfest (and
+# HA's YAML validator) that explicitly, since defining async_setup()
+# below without declaring a schema is otherwise flagged.
+CONFIG_SCHEMA = cv.empty_config_schema(DOMAIN)
 
 # `image_processing` predates config entries and was never given the
 # generic async_setup_entry/async_unload_entry shim that domains like
