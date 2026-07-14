@@ -19,7 +19,7 @@
       },
       "manage": {
         "title": "DOODS cameras",
-        "description": "Add, edit or remove cameras that DOODS analyzes. You'll be able to add more cameras to this same server later from the integration's options.",
+        "description": "Connected to {server}, using detector \"{detector}\". Add, edit or remove cameras that DOODS analyzes. You'll be able to add more cameras to this same server later from the integration's options. To change the server address or reconnect, use \"Reconfigure\" from the integration's own menu instead.",
         "menu_options": {
           "add_camera": "Add a camera",
           "edit_camera": "Edit a camera",
@@ -29,7 +29,7 @@
       },
       "add_camera": {
         "title": "{action} a camera",
-        "description": "Step 1 (of several -- Submit moves to the next step). Pick a camera, which labels to look for, and a base confidence. If you don't pick any labels, DOODS will report anything it finds at this confidence.",
+        "description": "Using detector \"{detector}\". Step 1 (of several -- Submit moves to the next step). Pick a camera, which labels to look for, and a base confidence. If you don't pick any labels, DOODS will report anything it finds at this confidence.",
         "data": {
           "entity_id": "Camera",
           "labels": "Labels to detect",
@@ -40,9 +40,15 @@
       },
       "label_confidence": {
         "title": "Confidence for \"{label}\"",
-        "description": "Step {step} of {total} -- Submit moves to the next step. Set a minimum confidence just for the \"{label}\" label, or leave it at the base confidence.",
+        "description": "Step {step} of {total} -- Submit moves to the next step. Set a minimum confidence just for the \"{label}\" label, or leave it at the base confidence. Optionally restrict where in the image this specific label is counted, separate from the camera's overall area (set on the last step).",
         "data": {
-          "confidence": "Confidence"
+          "confidence": "Confidence",
+          "restrict_area": "Restrict this label to a specific area",
+          "top": "Top",
+          "left": "Left",
+          "bottom": "Bottom",
+          "right": "Right",
+          "covers": "Detections must be fully inside this area"
         }
       },
       "area": {
@@ -68,24 +74,35 @@
         "data": {
           "profile_id": "Profile"
         }
+      },
+      "reconfigure": {
+        "title": "Update DOODS server connection",
+        "description": "This entry uses detector \"{detector}\" -- that can't be changed here since it determines which cameras and labels are valid; remove and re-add the integration if you need a different detector. Use this screen to update the server address, auth key or timeout, e.g. if the server's IP address changed.",
+        "data": {
+          "url": "URL",
+          "auth_key": "Auth key",
+          "timeout": "Timeout (seconds)"
+        }
       }
     },
     "error": {
       "cannot_connect": "Unable to connect to the DOODS server.",
-      "no_detectors": "The DOODS server did not report any detectors."
+      "no_detectors": "The DOODS server did not report any detectors.",
+      "detector_not_found": "Detector \"{detector}\" is not available on this server."
     },
     "abort": {
       "already_configured": "This DOODS server and detector are already configured. Any cameras from your YAML configuration have been merged into the existing entry.",
       "cannot_connect": "Unable to connect to the DOODS server.",
       "detector_not_found": "The imported detector is no longer available on the DOODS server.",
-      "no_cameras": "The imported configuration did not list any cameras."
+      "no_cameras": "The imported configuration did not list any cameras.",
+      "reconfigure_successful": "The DOODS server connection was updated successfully."
     }
   },
   "options": {
     "step": {
       "manage": {
         "title": "DOODS cameras",
-        "description": "Add, edit or remove cameras that DOODS analyzes.",
+        "description": "Connected to {server}, using detector \"{detector}\". Add, edit or remove cameras that DOODS analyzes.",
         "menu_options": {
           "add_camera": "Add a camera",
           "edit_camera": "Edit a camera",
@@ -95,7 +112,7 @@
       },
       "add_camera": {
         "title": "{action} a camera",
-        "description": "Step 1 (of several -- Submit moves to the next step). Pick a camera, which labels to look for, and a base confidence. If you don't pick any labels, DOODS will report anything it finds at this confidence. A camera can be added more than once if you want separate profiles (e.g. a general one and one cropped to a specific zone).",
+        "description": "Using detector \"{detector}\". Step 1 (of several -- Submit moves to the next step). Pick a camera, which labels to look for, and a base confidence. If you don't pick any labels, DOODS will report anything it finds at this confidence. A camera can be added more than once if you want separate profiles (e.g. a general one and one cropped to a specific zone).",
         "data": {
           "entity_id": "Camera",
           "labels": "Labels to detect",
@@ -106,9 +123,15 @@
       },
       "label_confidence": {
         "title": "Confidence for \"{label}\"",
-        "description": "Step {step} of {total} -- Submit moves to the next step. Set a minimum confidence just for the \"{label}\" label, or leave it at the base confidence.",
+        "description": "Step {step} of {total} -- Submit moves to the next step. Set a minimum confidence just for the \"{label}\" label, or leave it at the base confidence. Optionally restrict where in the image this specific label is counted, separate from the camera's overall area (set on the last step).",
         "data": {
-          "confidence": "Confidence"
+          "confidence": "Confidence",
+          "restrict_area": "Restrict this label to a specific area",
+          "top": "Top",
+          "left": "Left",
+          "bottom": "Bottom",
+          "right": "Right",
+          "covers": "Detections must be fully inside this area"
         }
       },
       "area": {

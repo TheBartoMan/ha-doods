@@ -13,7 +13,12 @@ CONF_CAMERAS = "cameras"
 # profile's entity unique_id and lets YAML re-imports update the right
 # profile across restarts instead of duplicating it.
 CONF_PROFILE_ID = "profile_id"
-# CONF_LABELS holds a {label: confidence} mapping (empty means "any label").
+# CONF_LABELS holds a {label: info} mapping (empty means "any label"), where
+# info is {CONF_CONFIDENCE: float, CONF_AREA: {...} | omitted}. Profiles
+# saved before per-label areas existed stored a plain float per label
+# instead of this dict -- both shapes are read transparently wherever
+# CONF_LABELS values are consumed (see _label_info() in config_flow.py and
+# image_processing.py), so old config entries keep working unmodified.
 CONF_LABELS = "labels"
 CONF_AREA = "area"
 CONF_TOP = "top"
@@ -22,6 +27,10 @@ CONF_RIGHT = "right"
 CONF_LEFT = "left"
 CONF_COVERS = "covers"
 CONF_FILE_OUT = "file_out"
+# Transient form field (config flow only) -- not stored. Toggles whether
+# the label_confidence step's area fields should be saved as this label's
+# CONF_AREA override.
+CONF_RESTRICT_AREA = "restrict_area"
 
 DEFAULT_TIMEOUT = 90
 DEFAULT_CONFIDENCE = 50.0

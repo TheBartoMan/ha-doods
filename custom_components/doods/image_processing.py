@@ -57,6 +57,23 @@ from .const import (
 
 _LOGGER = logging.getLogger(__name__)
 
+
+def _label_info(value: Any) -> dict[str, Any]:
+    """Normalize a stored CONF_LABELS entry to {confidence, area} form.
+
+    Profiles saved before per-label areas existed stored a plain float
+    (just the confidence) per label instead of a dict. Reading both shapes
+    here means already-deployed config entries keep working unmodified.
+    Kept identical to (but independent of) config_flow._label_info, since
+    platform files don't import from config_flow.
+    """
+    if isinstance(value, dict):
+        return value
+    if value is None:
+        return {}
+    return {CONF_CONFIDENCE: value}
+
+
 ATTR_MATCHES = "matches"
 ATTR_SUMMARY = "summary"
 ATTR_TOTAL_MATCHES = "total_matches"
@@ -224,8 +241,30 @@ class Doods(ImageProcessingEntity):
             self._aspect = detector["width"] / detector["height"]
 
         base_confidence: float = camera_config[CONF_CONFIDENCE]
-        label_confidences: dict[str, float] = camera_config.get(CONF_LABELS) or {}
-        self._dconfig: dict[str, float] = label_confidences or {"*": base_confidence}
+        labels: dict[str, Any] = camera_config.get(CONF_LABELS) or {}
+
+        # dconfig is what's actually sent to the DOODS API: a flat
+        # {label: confidence} map (or {"*": confidence} for "any label").
+        # Per-label areas are a purely local post-filter below -- DOODS
+        # itself has no concept of them -- so they're kept separate from
+        # dconfig rather than folded into it.
+        dconfig: dict[str, float] = {}
+        label_areas: dict[str, list[float]] = {}
+        label_covers: dict[str, bool] = {}
+        for label, raw_info in labels.items():
+            info = _label_info(raw_info)
+            dconfig[label] = info.get(CONF_CONFIDENCE, base_confidence)
+            if label_area := info.get(CONF_AREA):
+                label_areas[label] = [
+                    label_area[CONF_TOP],
+                    label_area[CONF_LEFT],
+                    label_area[CONF_BOTTOM],
+                    label_area[CONF_RIGHT],
+                ]
+                label_covers[label] = label_area[CONF_COVERS]
+        self._dconfig: dict[str, float] = dconfig or {"*": base_confidence}
+        self._label_areas = label_areas
+        self._label_covers = label_covers
 
         self._area = [0.0, 0.0, 1.0, 1.0]
         self._covers = True
@@ -312,6 +351,15 @@ class Doods(ImageProcessingEntity):
             )
 
         for label, values in matches.items():
+            if label_area := self._label_areas.get(label):
+                draw_box(
+                    draw,
+                    label_area,
+                    img_width,
+                    img_height,
+                    f"{label.capitalize()} Detection Area",
+                    (0, 255, 0),
+                )
             for instance in values:
                 box_label = f"{label} {instance['score']:.1f}%"
                 draw_box(
@@ -398,6 +446,26 @@ class Doods(ImageProcessingEntity):
                 or boxes[3] < self._area[1]
             ):
                 continue
+
+            # Exclude matches outside this label's own area override, if it
+            # has one -- applied in addition to (not instead of) the
+            # whole-camera area check above.
+            if label_area := self._label_areas.get(label):
+                if self._label_covers[label]:
+                    if (
+                        boxes[0] < label_area[0]
+                        or boxes[1] < label_area[1]
+                        or boxes[2] > label_area[2]
+                        or boxes[3] > label_area[3]
+                    ):
+                        continue
+                elif (
+                    boxes[0] > label_area[2]
+                    or boxes[1] > label_area[3]
+                    or boxes[2] < label_area[0]
+                    or boxes[3] < label_area[1]
+                ):
+                    continue
 
             matches.setdefault(label, []).append(
                 {"score": float(score), "box": boxes}
