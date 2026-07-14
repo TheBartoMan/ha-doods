@@ -8,6 +8,11 @@
           "url": "URL",
           "auth_key": "Auth key",
           "timeout": "Timeout (seconds)"
+        },
+        "data_description": {
+          "url": "The address of your DOODS (or DOODS2) server, e.g. http://192.168.1.10:8080.",
+          "auth_key": "Only needed if your DOODS server requires an auth key to accept requests. Leave blank otherwise.",
+          "timeout": "How many seconds to wait for a response before giving up on a request to the server."
         }
       },
       "detector": {
@@ -15,6 +20,9 @@
         "description": "Select which detector on this DOODS server to use.",
         "data": {
           "detector": "Detector"
+        },
+        "data_description": {
+          "detector": "Every camera added under this entry will be analyzed using this detector. To use a different detector from the same server, add the DOODS integration again with the same URL and pick that detector instead."
         }
       },
       "manage": {
@@ -24,6 +32,7 @@
           "add_camera": "Add a camera",
           "edit_camera": "Edit a camera",
           "remove_camera": "Remove a camera",
+          "export_yaml": "View/export as YAML",
           "finish": "Finish"
         }
       },
@@ -32,10 +41,19 @@
         "description": "Using detector \"{detector}\". Step 1 (of several -- Submit moves to the next step). Pick a camera, which labels to look for, and a base confidence. If you don't pick any labels, DOODS will report anything it finds at this confidence.",
         "data": {
           "entity_id": "Camera",
+          "name": "Friendly name (optional)",
           "labels": "Labels to detect",
           "confidence": "Base confidence",
           "scan_interval": "Scan interval (seconds)",
-          "file_out": "Save an annotated snapshot to (optional path, e.g. /config/www/doods_front.jpg)"
+          "file_out": "Save an annotated snapshot to (optional path(s), e.g. /config/www/doods_front.jpg)"
+        },
+        "data_description": {
+          "entity_id": "The camera whose images DOODS will analyze.",
+          "name": "Optional. Overrides the default \"Doods <camera>\" name for this profile's entity. Leave blank to use the default.",
+          "labels": "Which object labels to look for, from what this detector supports. Leave empty to report every label the detector finds, at the base confidence below.",
+          "confidence": "The minimum confidence percentage a detection needs to be reported, for any selected label without its own override on the next screen(s).",
+          "scan_interval": "How often, in seconds, to ask DOODS to analyze a new image from this camera. Lower values react faster but poll the server (and your camera) more often.",
+          "file_out": "Optional. If set, saves a copy of the image with detection boxes drawn on it to this path whenever something is detected -- useful for visually checking what triggered. You can add more than one path to save to several places at once. Each path must be absolute (starting with /), e.g. /config/www/doods_front.jpg. Leave empty to skip saving snapshots entirely."
         }
       },
       "label_confidence": {
@@ -49,6 +67,15 @@
           "bottom": "Bottom",
           "right": "Right",
           "covers": "Detections must be fully inside this area"
+        },
+        "data_description": {
+          "confidence": "The minimum confidence percentage needed for a \"{label}\" detection to be reported.",
+          "restrict_area": "Turn this on to only count \"{label}\" within a specific part of the image, rather than anywhere within the camera's overall area. The fields below only apply if this is on.",
+          "top": "Top edge of the area, from 0 (top of the image) to 1 (bottom of the image).",
+          "left": "Left edge of the area, from 0 (left of the image) to 1 (right of the image).",
+          "bottom": "Bottom edge of the area, from 0 (top of the image) to 1 (bottom of the image).",
+          "right": "Right edge of the area, from 0 (left of the image) to 1 (right of the image).",
+          "covers": "On: a \"{label}\" detection must be entirely inside this area to count. Off: it counts if it overlaps this area at all, even partially."
         }
       },
       "area": {
@@ -60,6 +87,13 @@
           "bottom": "Bottom",
           "right": "Right",
           "covers": "Detections must be fully inside this area"
+        },
+        "data_description": {
+          "top": "Top edge of the area, from 0 (top of the image) to 1 (bottom of the image). Leave at 0 to not restrict from the top.",
+          "left": "Left edge of the area, from 0 (left of the image) to 1 (right of the image). Leave at 0 to not restrict from the left.",
+          "bottom": "Bottom edge of the area, from 0 (top of the image) to 1 (bottom of the image). Leave at 1 to not restrict from the bottom.",
+          "right": "Right edge of the area, from 0 (left of the image) to 1 (right of the image). Leave at 1 to not restrict from the right.",
+          "covers": "On: a detection must be entirely inside this area to count. Off: it counts if it overlaps this area at all, even partially. Any label with its own area override (set on the previous screens) is filtered by that too, in addition to this."
         }
       },
       "edit_camera": {
@@ -67,28 +101,57 @@
         "description": "Pick a profile to reconfigure. You'll re-enter its labels, confidence, scan interval, area and snapshot settings.",
         "data": {
           "profile_id": "Profile"
+        },
+        "data_description": {
+          "profile_id": "The camera and profile to edit. A camera can have more than one profile, shown as \"(2)\", \"(3)\" etc. after its name."
         }
       },
       "remove_camera": {
         "title": "Remove a camera profile",
         "data": {
           "profile_id": "Profile"
+        },
+        "data_description": {
+          "profile_id": "The camera and profile to remove. This deletes that profile's entity; other profiles on the same camera (if any) are unaffected."
         }
       },
-      "reconfigure": {
+      "export_yaml": {
+        "title": "View/export as YAML",
+        "description": "This is a read-only snapshot of the equivalent `image_processing:` YAML for every camera currently configured on this entry, including your auth key in plain text if one is set. Copy it somewhere safe -- e.g. before removing the integration -- to back up or recreate this setup later. Submitting this screen does not change anything, even if you edit the text.",
+        "data": {
+          "yaml": "YAML"
+        }
+      },
+      "reconfigure_connection": {
         "title": "Update DOODS server connection",
-        "description": "This entry uses detector \"{detector}\" -- that can't be changed here since it determines which cameras and labels are valid; remove and re-add the integration if you need a different detector. Use this screen to update the server address, auth key or timeout, e.g. if the server's IP address changed.",
+        "description": "This entry currently uses detector \"{detector}\". Update the server address, auth key or timeout here, e.g. if the server's IP address changed -- then you'll be able to confirm or change the detector on the next screen.",
         "data": {
           "url": "URL",
           "auth_key": "Auth key",
           "timeout": "Timeout (seconds)"
+        },
+        "data_description": {
+          "url": "The address of your DOODS (or DOODS2) server, e.g. http://192.168.1.10:8080.",
+          "auth_key": "Only needed if your DOODS server requires an auth key to accept requests. Leave blank otherwise.",
+          "timeout": "How many seconds to wait for a response before giving up on a request to the server."
+        }
+      },
+      "reconfigure_detector": {
+        "title": "Confirm or change detector",
+        "description": "This entry currently uses detector \"{current_detector}\". Pick the same detector to keep it, or a different one to switch. Changing detectors doesn't update any camera's saved labels -- if the new detector doesn't support the same labels as before, review and update your cameras' labels afterwards or they may stop matching anything.",
+        "data": {
+          "detector": "Detector"
+        },
+        "data_description": {
+          "detector": "Every camera under this entry will be analyzed using this detector."
         }
       }
     },
     "error": {
       "cannot_connect": "Unable to connect to the DOODS server.",
       "no_detectors": "The DOODS server did not report any detectors.",
-      "detector_not_found": "Detector \"{detector}\" is not available on this server."
+      "detector_not_found": "Detector \"{detector}\" is not available on this server.",
+      "file_out_invalid": "Each path must be absolute, starting with /, e.g. /config/www/doods_front.jpg. Leave empty to skip saving snapshots."
     },
     "abort": {
       "already_configured": "This DOODS server and detector are already configured. Any cameras from your YAML configuration have been merged into the existing entry.",
@@ -107,6 +170,7 @@
           "add_camera": "Add a camera",
           "edit_camera": "Edit a camera",
           "remove_camera": "Remove a camera",
+          "export_yaml": "View/export as YAML",
           "finish": "Finish"
         }
       },
@@ -115,10 +179,19 @@
         "description": "Using detector \"{detector}\". Step 1 (of several -- Submit moves to the next step). Pick a camera, which labels to look for, and a base confidence. If you don't pick any labels, DOODS will report anything it finds at this confidence. A camera can be added more than once if you want separate profiles (e.g. a general one and one cropped to a specific zone).",
         "data": {
           "entity_id": "Camera",
+          "name": "Friendly name (optional)",
           "labels": "Labels to detect",
           "confidence": "Base confidence",
           "scan_interval": "Scan interval (seconds)",
-          "file_out": "Save an annotated snapshot to (optional path, e.g. /config/www/doods_front.jpg)"
+          "file_out": "Save an annotated snapshot to (optional path(s), e.g. /config/www/doods_front.jpg)"
+        },
+        "data_description": {
+          "entity_id": "The camera whose images DOODS will analyze.",
+          "name": "Optional. Overrides the default \"Doods <camera>\" name for this profile's entity. Leave blank to use the default.",
+          "labels": "Which object labels to look for, from what this detector supports. Leave empty to report every label the detector finds, at the base confidence below.",
+          "confidence": "The minimum confidence percentage a detection needs to be reported, for any selected label without its own override on the next screen(s).",
+          "scan_interval": "How often, in seconds, to ask DOODS to analyze a new image from this camera. Lower values react faster but poll the server (and your camera) more often.",
+          "file_out": "Optional. If set, saves a copy of the image with detection boxes drawn on it to this path whenever something is detected -- useful for visually checking what triggered. You can add more than one path to save to several places at once. Each path must be absolute (starting with /), e.g. /config/www/doods_front.jpg. Leave empty to skip saving snapshots entirely."
         }
       },
       "label_confidence": {
@@ -132,6 +205,15 @@
           "bottom": "Bottom",
           "right": "Right",
           "covers": "Detections must be fully inside this area"
+        },
+        "data_description": {
+          "confidence": "The minimum confidence percentage needed for a \"{label}\" detection to be reported.",
+          "restrict_area": "Turn this on to only count \"{label}\" within a specific part of the image, rather than anywhere within the camera's overall area. The fields below only apply if this is on.",
+          "top": "Top edge of the area, from 0 (top of the image) to 1 (bottom of the image).",
+          "left": "Left edge of the area, from 0 (left of the image) to 1 (right of the image).",
+          "bottom": "Bottom edge of the area, from 0 (top of the image) to 1 (bottom of the image).",
+          "right": "Right edge of the area, from 0 (left of the image) to 1 (right of the image).",
+          "covers": "On: a \"{label}\" detection must be entirely inside this area to count. Off: it counts if it overlaps this area at all, even partially."
         }
       },
       "area": {
@@ -143,6 +225,13 @@
           "bottom": "Bottom",
           "right": "Right",
           "covers": "Detections must be fully inside this area"
+        },
+        "data_description": {
+          "top": "Top edge of the area, from 0 (top of the image) to 1 (bottom of the image). Leave at 0 to not restrict from the top.",
+          "left": "Left edge of the area, from 0 (left of the image) to 1 (right of the image). Leave at 0 to not restrict from the left.",
+          "bottom": "Bottom edge of the area, from 0 (top of the image) to 1 (bottom of the image). Leave at 1 to not restrict from the bottom.",
+          "right": "Right edge of the area, from 0 (left of the image) to 1 (right of the image). Leave at 1 to not restrict from the right.",
+          "covers": "On: a detection must be entirely inside this area to count. Off: it counts if it overlaps this area at all, even partially. Any label with its own area override (set on the previous screens) is filtered by that too, in addition to this."
         }
       },
       "edit_camera": {
@@ -150,14 +239,30 @@
         "description": "Pick a profile to reconfigure. You'll re-enter its labels, confidence, scan interval, area and snapshot settings.",
         "data": {
           "profile_id": "Profile"
+        },
+        "data_description": {
+          "profile_id": "The camera and profile to edit. A camera can have more than one profile, shown as \"(2)\", \"(3)\" etc. after its name."
         }
       },
       "remove_camera": {
         "title": "Remove a camera profile",
         "data": {
           "profile_id": "Profile"
+        },
+        "data_description": {
+          "profile_id": "The camera and profile to remove. This deletes that profile's entity; other profiles on the same camera (if any) are unaffected."
+        }
+      },
+      "export_yaml": {
+        "title": "View/export as YAML",
+        "description": "This is a read-only snapshot of the equivalent `image_processing:` YAML for every camera currently configured on this entry, including your auth key in plain text if one is set. Copy it somewhere safe -- e.g. before removing the integration -- to back up or recreate this setup later. Submitting this screen does not change anything, even if you edit the text.",
+        "data": {
+          "yaml": "YAML"
         }
       }
+    },
+    "error": {
+      "file_out_invalid": "Each path must be absolute, starting with /, e.g. /config/www/doods_front.jpg. Leave empty to skip saving snapshots."
     }
   },
   "issues": {

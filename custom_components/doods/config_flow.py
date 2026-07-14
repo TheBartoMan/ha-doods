@@ -9,6 +9,7 @@ import uuid
 
 from pydoods import PyDOODS
 import voluptuous as vol
+import yaml
 
 from homeassistant.components.image_processing import CONF_CONFIDENCE
 from homeassistant.config_entries import (
@@ -37,6 +38,7 @@ from homeassistant.helpers.selector import (
     SelectSelector,
     SelectSelectorConfig,
     TextSelector,
+    TextSelectorConfig,
 )
 
 from .const import (
@@ -130,6 +132,23 @@ def _scan_interval_selector() -> NumberSelector:
     )
 
 
+def _as_path_list(value: Any) -> list[str]:
+    """Normalize a stored CONF_FILE_OUT value to a list of paths.
+
+    The original YAML integration allowed file_out to be a *list* of
+    paths (save the annotated snapshot to more than one place). Profiles
+    saved before this was exposed in the UI stored a single string (or ""
+    for none) instead. Reading both shapes here means already-deployed
+    config entries keep working, and nothing from a multi-path YAML
+    import gets silently dropped down to just the first path.
+    """
+    if isinstance(value, list):
+        return [v for v in value if v]
+    if isinstance(value, str) and value:
+        return [value]
+    return []
+
+
 def _label_info(value: Any) -> dict[str, Any]:
     """Normalize a stored CONF_LABELS entry to {confidence, area} form.
 
@@ -142,6 +161,88 @@ def _label_info(value: Any) -> dict[str, Any]:
     if value is None:
         return {}
     return {CONF_CONFIDENCE: value}
+
+
+def _camera_to_yaml_block(
+    camera: dict[str, Any],
+    url: str,
+    auth_key: str,
+    timeout: int,
+    detector_name: str,
+) -> dict[str, Any]:
+    """Build one `platform: doods` YAML block for a single camera profile.
+
+    Emits one block per profile, rather than trying to group profiles that
+    happen to share settings into one block with several `source:` entries
+    (the way hand-written YAML often did). That keeps every per-camera
+    setting the UI allows -- confidence, scan_interval, file_out, labels,
+    area -- round-tripping exactly for every profile.
+    """
+    block: dict[str, Any] = {
+        "platform": DOMAIN,
+        CONF_URL: url,
+        CONF_TIMEOUT: timeout,
+        CONF_DETECTOR: detector_name,
+    }
+    if auth_key:
+        block[CONF_AUTH_KEY] = auth_key
+
+    source: dict[str, Any] = {CONF_ENTITY_ID: camera[CONF_ENTITY_ID]}
+    if camera.get(CONF_NAME):
+        source[CONF_NAME] = camera[CONF_NAME]
+    block[CONF_SOURCE] = [source]
+
+    block[CONF_CONFIDENCE] = camera.get(CONF_CONFIDENCE, DEFAULT_CONFIDENCE)
+
+    labels_out = []
+    for label, raw_info in (camera.get(CONF_LABELS) or {}).items():
+        info = _label_info(raw_info)
+        label_block: dict[str, Any] = {CONF_NAME: label}
+        if CONF_CONFIDENCE in info:
+            label_block[CONF_CONFIDENCE] = info[CONF_CONFIDENCE]
+        if label_area := info.get(CONF_AREA):
+            label_block[CONF_AREA] = dict(label_area)
+        labels_out.append(label_block)
+    if labels_out:
+        block[CONF_LABELS] = labels_out
+
+    if camera_area := camera.get(CONF_AREA):
+        block[CONF_AREA] = dict(camera_area)
+
+    file_outs = _as_path_list(camera.get(CONF_FILE_OUT))
+    if file_outs:
+        block[CONF_FILE_OUT] = file_outs
+
+    scan_interval = camera.get(CONF_SCAN_INTERVAL)
+    if scan_interval and scan_interval != DEFAULT_SCAN_INTERVAL:
+        block[CONF_SCAN_INTERVAL] = scan_interval
+
+    return block
+
+
+def _cameras_to_yaml(
+    cameras: list[dict[str, Any]],
+    url: str,
+    auth_key: str,
+    timeout: int,
+    detector_name: str,
+) -> str:
+    """Render every camera profile as `image_processing:` YAML.
+
+    A snapshot of the equivalent configuration.yaml block for this entry's
+    current settings -- handy for backing up or recreating a setup after
+    removing the integration, since the GUI is the only place these
+    settings live once a profile has been imported or created here.
+    """
+    blocks = [
+        _camera_to_yaml_block(camera, url, auth_key, timeout, detector_name)
+        for camera in cameras
+    ]
+    return yaml.safe_dump(
+        {"image_processing": blocks},
+        sort_keys=False,
+        default_flow_style=False,
+    )
 
 
 def _camera_profile_options(cameras: list[dict[str, Any]]) -> list[SelectOptionDict]:
@@ -196,6 +297,8 @@ class _CameraStepsMixin:
 
     hass: HomeAssistant
     _url: str
+    _auth_key: str
+    _timeout: int
     _detector: dict[str, Any]
     _cameras: list[dict[str, Any]]
     _camera_draft: dict[str, Any]
@@ -226,7 +329,7 @@ class _CameraStepsMixin:
         """Menu: add, edit or remove a camera, or finish."""
         menu_options = ["add_camera"]
         if self._cameras:
-            menu_options += ["edit_camera", "remove_camera", "finish"]
+            menu_options += ["edit_camera", "remove_camera", "export_yaml", "finish"]
         return self.async_show_menu(  # type: ignore[attr-defined]
             step_id="manage",
             menu_options=menu_options,
@@ -239,7 +342,7 @@ class _CameraStepsMixin:
     async def async_step_add_camera(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Pick a camera, which labels to detect, base confidence and snapshot path.
+        """Pick a camera, which labels to detect, base confidence and snapshot path(s).
 
         A camera entity can be added more than once -- each addition is a
         separate detection profile (its own labels/confidence/area/
@@ -250,20 +353,33 @@ class _CameraStepsMixin:
         # were pre-loaded by async_step_edit_camera with the profile's
         # current settings, to use as this form's defaults below.
         existing = self._camera_draft
+        errors: dict[str, str] = {}
 
         if user_input is not None:
-            self._camera_draft = {
-                CONF_PROFILE_ID: self._editing_profile_id or uuid.uuid4().hex,
-                CONF_ENTITY_ID: user_input[CONF_ENTITY_ID],
-                CONF_CONFIDENCE: user_input[CONF_CONFIDENCE],
-                CONF_SCAN_INTERVAL: user_input[CONF_SCAN_INTERVAL],
-                CONF_FILE_OUT: user_input.get(CONF_FILE_OUT, ""),
-                CONF_LABELS: {},
-            }
-            self._base_confidence = user_input[CONF_CONFIDENCE]
-            self._label_queue = list(user_input.get(CONF_LABELS, []))
-            self._label_total = len(self._label_queue)
-            return await self.async_step_label_confidence()
+            file_outs = [p.strip() for p in user_input.get(CONF_FILE_OUT, []) if p.strip()]
+            bad_path = next((p for p in file_outs if not p.startswith("/")), None)
+            if bad_path:
+                errors[CONF_FILE_OUT] = "file_out_invalid"
+            else:
+                camera_name = user_input.get(CONF_NAME, "").strip()
+                self._camera_draft = {
+                    CONF_PROFILE_ID: self._editing_profile_id or uuid.uuid4().hex,
+                    CONF_ENTITY_ID: user_input[CONF_ENTITY_ID],
+                    CONF_CONFIDENCE: user_input[CONF_CONFIDENCE],
+                    CONF_SCAN_INTERVAL: user_input[CONF_SCAN_INTERVAL],
+                    CONF_FILE_OUT: file_outs,
+                    CONF_LABELS: {},
+                }
+                if camera_name:
+                    self._camera_draft[CONF_NAME] = camera_name
+                self._base_confidence = user_input[CONF_CONFIDENCE]
+                self._label_queue = list(user_input.get(CONF_LABELS, []))
+                self._label_total = len(self._label_queue)
+                return await self.async_step_label_confidence()
+            # Validation failed -- redisplay with what was just typed as the
+            # defaults below, instead of the previously-saved values, so
+            # nothing the user entered gets lost.
+            existing = {**user_input, CONF_FILE_OUT: file_outs}
 
         entity_id_key = (
             vol.Required(CONF_ENTITY_ID, default=existing[CONF_ENTITY_ID])
@@ -273,6 +389,9 @@ class _CameraStepsMixin:
         schema = vol.Schema(
             {
                 entity_id_key: EntitySelector(EntitySelectorConfig(domain="camera")),
+                vol.Optional(
+                    CONF_NAME, default=existing.get(CONF_NAME, "")
+                ): TextSelector(),
                 vol.Optional(
                     CONF_LABELS,
                     default=list(self._existing_labels),
@@ -290,13 +409,14 @@ class _CameraStepsMixin:
                     default=existing.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL),
                 ): _scan_interval_selector(),
                 vol.Optional(
-                    CONF_FILE_OUT, default=existing.get(CONF_FILE_OUT, "")
-                ): TextSelector(),
+                    CONF_FILE_OUT, default=_as_path_list(existing.get(CONF_FILE_OUT))
+                ): TextSelector(TextSelectorConfig(multiple=True)),
             }
         )
         return self.async_show_form(  # type: ignore[attr-defined]
             step_id="add_camera",
             data_schema=schema,
+            errors=errors,
             description_placeholders={
                 "action": "Edit" if self._editing_profile_id else "Add",
                 "detector": self._detector.get("name", ""),
@@ -428,6 +548,39 @@ class _CameraStepsMixin:
             description_placeholders={"step": str(total), "total": str(total)},
         )
 
+    async def async_step_export_yaml(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Show this entry's cameras as the equivalent configuration.yaml block.
+
+        Read-only: HA's form steps always have a Submit button, but
+        submitting here just returns to the manage menu without saving
+        anything, even if the text was edited. This exists purely so the
+        settings can be copied out and kept somewhere safe -- e.g. before
+        removing the integration, or just as a backup.
+        """
+        if user_input is not None:
+            return await self.async_step_manage()
+
+        yaml_text = _cameras_to_yaml(
+            self._cameras,
+            self._url,
+            self._auth_key,
+            self._timeout,
+            self._detector.get("name", ""),
+        )
+        schema = vol.Schema(
+            {
+                vol.Optional("yaml", default=yaml_text): TextSelector(
+                    TextSelectorConfig(multiline=True)
+                )
+            }
+        )
+        return self.async_show_form(  # type: ignore[attr-defined]
+            step_id="export_yaml",
+            data_schema=schema,
+        )
+
     async def async_step_edit_camera(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
@@ -448,6 +601,7 @@ class _CameraStepsMixin:
             self._existing_area = camera.get(CONF_AREA)
             self._camera_draft = {
                 CONF_ENTITY_ID: camera[CONF_ENTITY_ID],
+                CONF_NAME: camera.get(CONF_NAME, ""),
                 CONF_CONFIDENCE: camera[CONF_CONFIDENCE],
                 CONF_SCAN_INTERVAL: camera.get(
                     CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL
@@ -576,57 +730,98 @@ class DoodsConfigFlow(ConfigFlow, _CameraStepsMixin, domain=DOMAIN):
     async def async_step_reconfigure(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Update the DOODS server connection (URL, auth key, timeout).
+        """Update the DOODS server connection, then optionally the detector.
 
-        This is what "Reconfigure" on the integration's own menu runs --
-        it's the only place the server connection details (and, read-only,
-        which detector this entry uses) are visible or editable after
-        initial setup. The detector itself can't be changed here: it's
-        baked into which cameras/labels are valid and into how this entry
-        merges with re-imported YAML, so switching detectors means
-        removing and re-adding the integration instead.
+        This is what "Reconfigure" on the integration's own menu runs -- the
+        only place the server connection and detector are visible or
+        editable after initial setup.
         """
+        return await self.async_step_reconfigure_connection()
+
+    async def async_step_reconfigure_connection(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Update URL/auth key/timeout, then move to the detector step."""
         entry = self._get_reconfigure_entry()
         errors: dict[str, str] = {}
         if user_input is not None:
-            url = user_input[CONF_URL]
-            auth_key = user_input.get(CONF_AUTH_KEY, "")
-            timeout = user_input[CONF_TIMEOUT]
-            detector_name = entry.data[CONF_DETECTOR]
+            self._url = user_input[CONF_URL]
+            self._auth_key = user_input.get(CONF_AUTH_KEY, "")
+            self._timeout = user_input[CONF_TIMEOUT]
             try:
-                detectors = await async_get_detectors(
-                    self.hass, url, auth_key, timeout
+                self._detectors = await async_get_detectors(
+                    self.hass, self._url, self._auth_key, self._timeout
                 )
             except CannotConnect:
                 errors["base"] = "cannot_connect"
             else:
-                if not any(d["name"] == detector_name for d in detectors):
-                    errors["base"] = "detector_not_found"
+                if not self._detectors:
+                    errors["base"] = "no_detectors"
                 else:
-                    return self.async_update_reload_and_abort(
-                        entry,
-                        data={
-                            CONF_URL: url,
-                            CONF_AUTH_KEY: auth_key,
-                            CONF_TIMEOUT: timeout,
-                            CONF_DETECTOR: detector_name,
-                        },
-                    )
+                    return await self.async_step_reconfigure_detector()
 
         schema = vol.Schema(
             {
-                vol.Required(CONF_URL, default=entry.data[CONF_URL]): str,
-                vol.Optional(
-                    CONF_AUTH_KEY, default=entry.data.get(CONF_AUTH_KEY, "")
+                vol.Required(
+                    CONF_URL, default=self._url or entry.data[CONF_URL]
                 ): str,
-                vol.Required(CONF_TIMEOUT, default=entry.data[CONF_TIMEOUT]): int,
+                vol.Optional(
+                    CONF_AUTH_KEY,
+                    default=self._auth_key or entry.data.get(CONF_AUTH_KEY, ""),
+                ): str,
+                vol.Required(
+                    CONF_TIMEOUT, default=self._timeout or entry.data[CONF_TIMEOUT]
+                ): int,
             }
         )
         return self.async_show_form(
-            step_id="reconfigure",
+            step_id="reconfigure_connection", data_schema=schema, errors=errors
+        )
+
+    async def async_step_reconfigure_detector(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Confirm or change the detector, then save.
+
+        Changing detectors doesn't touch any camera's saved label
+        selections -- if the new detector doesn't support the same labels
+        the old one did, those cameras may stop matching anything until
+        their labels are reviewed and updated (this is called out in the
+        step's description, since it's easy to miss).
+        """
+        entry = self._get_reconfigure_entry()
+        if user_input is not None:
+            return self.async_update_reload_and_abort(
+                entry,
+                data={
+                    CONF_URL: self._url,
+                    CONF_AUTH_KEY: self._auth_key,
+                    CONF_TIMEOUT: self._timeout,
+                    CONF_DETECTOR: user_input[CONF_DETECTOR],
+                },
+            )
+
+        current_detector = entry.data[CONF_DETECTOR]
+        detector_names = [d["name"] for d in self._detectors]
+        options = [
+            SelectOptionDict(value=name, label=name) for name in detector_names
+        ]
+        schema = vol.Schema(
+            {
+                vol.Required(
+                    CONF_DETECTOR,
+                    default=(
+                        current_detector
+                        if current_detector in detector_names
+                        else None
+                    ),
+                ): SelectSelector(SelectSelectorConfig(options=options))
+            }
+        )
+        return self.async_show_form(
+            step_id="reconfigure_detector",
             data_schema=schema,
-            errors=errors,
-            description_placeholders={"detector": entry.data[CONF_DETECTOR]},
+            description_placeholders={"current_detector": current_detector},
         )
 
     async def async_step_import(
@@ -691,9 +886,10 @@ class DoodsConfigFlow(ConfigFlow, _CameraStepsMixin, domain=DOMAIN):
         # parses file_out into template.Template objects, not plain
         # strings -- str() on one gives its debug repr
         # ("Template<template=(...) renders=0>"), not the path. Use
-        # `.template` to get the original source string back.
-        file_outs = import_config.get(CONF_FILE_OUT) or []
-        file_out = file_outs[0].template if file_outs else ""
+        # `.template` to get the original source string back. file_out can
+        # be a *list* of paths (save the snapshot to more than one place);
+        # keep all of them, not just the first.
+        file_outs = [t.template for t in import_config.get(CONF_FILE_OUT) or []]
 
         # image_processing.PLATFORM_SCHEMA parses YAML's scan_interval (if
         # set) into a timedelta via cv.time_period. Store it in the same
@@ -716,18 +912,22 @@ class DoodsConfigFlow(ConfigFlow, _CameraStepsMixin, domain=DOMAIN):
         # it, even when several blocks share one camera entity (e.g. one
         # general-purpose profile and one cropped to a specific zone).
         block_index = import_config.get("_block_index", 0)
-        new_cameras = [
-            {
+        new_cameras = []
+        for i, source in enumerate(sources):
+            camera: dict[str, Any] = {
                 CONF_PROFILE_ID: f"yaml_{source[CONF_ENTITY_ID]}_{block_index}_{i}",
                 CONF_ENTITY_ID: source[CONF_ENTITY_ID],
                 CONF_CONFIDENCE: base_confidence,
                 CONF_SCAN_INTERVAL: scan_interval,
                 CONF_LABELS: label_confidences,
                 CONF_AREA: area,
-                CONF_FILE_OUT: file_out,
+                CONF_FILE_OUT: file_outs,
             }
-            for i, source in enumerate(sources)
-        ]
+            # Each `source:` entry can carry its own optional friendly-name
+            # override, same as the original YAML integration.
+            if source_name := source.get(CONF_NAME):
+                camera[CONF_NAME] = source_name
+            new_cameras.append(camera)
         new_profile_ids = {c[CONF_PROFILE_ID] for c in new_cameras}
 
         unique_id = f"{url}_{detector_name}"
@@ -788,6 +988,8 @@ class DoodsOptionsFlow(OptionsFlow, _CameraStepsMixin):
     def __init__(self) -> None:
         """Initialize the DOODS options flow."""
         self._url: str = ""
+        self._auth_key: str = ""
+        self._timeout: int = DEFAULT_TIMEOUT
         self._detector: dict[str, Any] = {}
         self._cameras: list[dict[str, Any]] = []
         self._camera_draft: dict[str, Any] = {}
@@ -804,6 +1006,8 @@ class DoodsOptionsFlow(OptionsFlow, _CameraStepsMixin):
         """Load the current cameras and detector, then enter the manage menu."""
         entry = self.config_entry
         self._url = entry.data[CONF_URL]
+        self._auth_key = entry.data.get(CONF_AUTH_KEY, "")
+        self._timeout = entry.data[CONF_TIMEOUT]
         try:
             detectors = await async_get_detectors(
                 self.hass,

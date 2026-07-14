@@ -224,10 +224,17 @@ class Doods(ImageProcessingEntity):
         """Initialize the DOODS entity."""
         camera_entity: str = camera_config[CONF_ENTITY_ID]
         self._attr_camera_entity = camera_entity
-        base_name = f"Doods {split_entity_id(camera_entity)[1]}"
-        self._attr_name = (
-            base_name if profile_index == 1 else f"{base_name} {profile_index}"
-        )
+        # An explicit name (from the UI's optional Name field, or YAML's
+        # per-source `name:`) always wins outright, matching the original
+        # integration. Otherwise fall back to an auto-generated one, with a
+        # "(N)" suffix when more than one profile shares this camera.
+        if custom_name := camera_config.get(CONF_NAME):
+            self._attr_name = custom_name
+        else:
+            base_name = f"Doods {split_entity_id(camera_entity)[1]}"
+            self._attr_name = (
+                base_name if profile_index == 1 else f"{base_name} {profile_index}"
+            )
         # camera_config.get(CONF_PROFILE_ID) falls back to the camera entity
         # for any pre-existing entry saved before profiles existed.
         profile_id = camera_config.get(CONF_PROFILE_ID) or camera_entity
@@ -277,10 +284,16 @@ class Doods(ImageProcessingEntity):
             ]
             self._covers = area_config[CONF_COVERS]
 
-        file_out = camera_config.get(CONF_FILE_OUT) or ""
-        self._file_out: list[template.Template] = (
-            [template.Template(file_out, hass)] if file_out else []
-        )
+        # CONF_FILE_OUT can be a single string (profiles saved before
+        # multi-path support existed) or a list of paths (new saves, and
+        # what the original YAML integration itself supported -- save the
+        # annotated snapshot to more than one place). Handle both.
+        raw_file_out = camera_config.get(CONF_FILE_OUT) or []
+        if isinstance(raw_file_out, str):
+            raw_file_out = [raw_file_out] if raw_file_out else []
+        self._file_out: list[template.Template] = [
+            template.Template(path, hass) for path in raw_file_out if path
+        ]
 
         self._scan_interval = camera_config.get(
             CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL
